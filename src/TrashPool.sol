@@ -7,8 +7,11 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 
-contract LPToken is ERC20, Ownable {
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
+contract LPToken is ERC20, Ownable{
+    constructor(string memory name, string memory symbol, address initialOwner)
+        ERC20(name, symbol)
+        Ownable(initialOwner) // Pass the initial owner address to Ownable
+    {}
 
     function mint(address to, uint256 amount) public onlyOwner {
         _mint(to, amount);
@@ -20,25 +23,27 @@ contract LPToken is ERC20, Ownable {
 }
 
 
-contract TrashPool {
-  IERC20 private tokenA;
-  IERC20 private tokenB;
-  LPToken private lpToken;
-  uint256 fee;
+contract TrashPool is ReentrancyGuard {
+  IERC20 public tokenA;
+  IERC20 public tokenB;
+  LPToken public lpToken;
+  uint256 public poolFee;
 
   //TODO add more logic to keep track of the DEX contract
-  constructor(address _A, address _B, uint256 _a_initial, uint256 _b_initial, uint256 poolFee){
+  constructor(address _A, address _B, uint256 _a_initial, uint256 _b_initial, uint256 _poolFee){
     tokenA = IERC20(_A);
     tokenB = IERC20(_B);
 
-    poolFee = poolFee;
+    poolFee = _poolFee;
 
     // Construct LP token name and symbol
     string memory lpTokenName = string(abi.encodePacked(ERC20(_A).name(), "-", ERC20(_B).name(), "-RECEIPT"));
     string memory lpTokenSymbol = string(abi.encodePacked("R-", ERC20(_A).symbol(), "-", ERC20(_B).symbol()));
 
     // Deploy the LP Token with dynamic name and symbol
-    lpToken = new LPToken(lpTokenName, lpTokenSymbol);
+    lpToken = new LPToken(lpTokenName, lpTokenSymbol, address(this));
+    lpToken.transferOwnership(address(this));
+
 
 
     require(tokenA.transferFrom(msg.sender, address(this), _a_initial), "Transfer of A failed");
@@ -49,7 +54,7 @@ contract TrashPool {
 
   }
 
-  function calculateSwapAmount(address tokenIn, address tokenOut, uint256 amountIn) private view  returns (uint256) {
+  function calculateSwapAmount(address tokenIn, address tokenOut, uint256 amountIn) public view  returns (uint256) {
     uint256 reserveIn = IERC20(tokenIn).balanceOf(address(this));
     uint256 reserveOut = IERC20(tokenOut).balanceOf(address(this));
 
@@ -87,7 +92,7 @@ contract TrashPool {
 
 
 
-  function totalPoolValue() public view returns (uint256) {
+  function totalPoolValue() public view returns (uint256)  {
     uint256 reserveA = tokenA.balanceOf(address(this));
     uint256 reserveB = tokenB.balanceOf(address(this));
     // Assuming equal weight or valuation for simplicity
@@ -95,7 +100,7 @@ contract TrashPool {
   }
 
 
-  function addLiquidity(uint256 desiredDeltaA, uint256 desiredDeltaB) external nonReentrant {
+  function addLiquidity(uint256 desiredDeltaA, uint256 desiredDeltaB) external  nonReentrant{
       uint256 reserveA = tokenA.balanceOf(address(this));
       uint256 reserveB = tokenB.balanceOf(address(this));
 
@@ -104,7 +109,6 @@ contract TrashPool {
 
       if (reserveA > 0 && reserveB > 0) {
           // Calculate the optimal amounts to maintain K
-          uint256 K = reserveA * reserveB;
           requiredDeltaB = (desiredDeltaA * reserveB) / reserveA;
           requiredDeltaA = (desiredDeltaB * reserveA) / reserveB;
 
@@ -122,22 +126,19 @@ contract TrashPool {
       require(tokenA.transferFrom(msg.sender, address(this), requiredDeltaA), "Transfer of Token A failed");
       require(tokenB.transferFrom(msg.sender, address(this), requiredDeltaB), "Transfer of Token B failed");
 
-      uint256 LPTokensReceipt = requiredDeltaB + requiredDeltaA; // Simplified example
+      uint256 LPTokensReceipt = requiredDeltaB + requiredDeltaA;
       lpToken.mint(msg.sender, LPTokensReceipt);
   }
 
 
-  function takeLiquidity() external nonReentrant {
-    uint256 LPTotal = LPToken.balanceOf(msg.sender);
-    uint256 LPreserveApart  = tokenA.balanceOf(address(this)) *  (LPTotal /  LPToken.totalSupply());
-    uint256 LPreserveBpart  = tokenB.balanceOf(address(this)) *  (LPTotal /  LPToken.totalSupply());
+  function takeLiquidity() external {
+    uint256 LPTotal = lpToken.balanceOf(msg.sender);
+    uint256 LPreserveApart  = tokenA.balanceOf(address(this)) *  (LPTotal /  lpToken.totalSupply());
+    uint256 LPreserveBpart  = tokenB.balanceOf(address(this)) *  (LPTotal /  lpToken.totalSupply());
 
-    LPToken.burn(msg.sender, LPTotal);
-    require(tokenA.transfer(msg.sender, address(this), requiredDeltaA), "Transfer of Token A failed");
-    require(tokenB.transfer(msg.sender, address(this), requiredDeltaB), "Transfer of Token B failed");
+    lpToken.burn(msg.sender, LPTotal);
+    require(tokenA.transfer(address(this), LPreserveApart), "Transfer of Token A failed");
+    require(tokenB.transfer(address(this), LPreserveBpart), "Transfer of Token B failed");
   }
-
-
-
 
 }
