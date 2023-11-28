@@ -36,12 +36,16 @@ contract TrashPoolTest is Test {
 
     function testSwapTokens() public {
       // Assuming initial liquidity has been added
+
+      uint256 initialAmount = tokenB.balanceOf(address(this));
+
+
       uint256 amountIn = 1e17; // 0.1 Token A
-      uint256 expectedOut = pool.calculateSwapAmount(address(tokenA), address(tokenB), amountIn);
+      uint256 expectedOut = pool.calculateSwapReturnWithFee(address(tokenA), address(tokenB), amountIn);
 
       pool.swap(address(tokenA), address(tokenB), amountIn);
 
-      assertEq(tokenB.balanceOf(address(this)), expectedOut, "Should receive correct amount of Token B");
+      assertEq(tokenB.balanceOf(address(this)) - initialAmount, expectedOut, "Should receive correct amount of Token B");
     }
 
     function testRemoveLiquidity() public {

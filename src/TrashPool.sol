@@ -71,21 +71,23 @@ contract TrashPool is ReentrancyGuard {
     return amountOut;
   }
 
+
+  function calculateSwapReturnWithFee(address tokenIn, address tokenOut, uint256 amountIn) public view returns (uint256) {
+      uint256 amountOut = calculateSwapAmount(tokenIn, tokenOut, amountIn);
+      uint256 fee = (amountOut * 3) / 1000;
+      return  amountOut - fee;
+  }
+
   function swap(address tokenIn, address tokenOut, uint256 amountIn) external {
       // Validate the tokens are part of the pool
       require((tokenIn == address(tokenA) && tokenOut == address(tokenB)) ||
               (tokenIn == address(tokenB) && tokenOut == address(tokenA)), "Invalid token pair");
 
-      // Calculate the amount of tokenOut to be sent
-      uint256 amountOut = calculateSwapAmount(tokenIn, tokenOut, amountIn);
 
       // Transfer tokenIn from the user to the pool
       require(IERC20(tokenIn).transferFrom(msg.sender, address(this), amountIn), "Transfer in failed");
 
-      // TODO: calculate fees
-      uint256 fee = (amountOut * 3) / 1000;
-      amountOut = amountOut - fee;
-
+      uint256 amountOut =  calculateSwapReturnWithFee(tokenIn, tokenOut, amountIn);
       // Transfer tokenOut from the pool to the user
       require(IERC20(tokenOut).transfer(msg.sender, amountOut), "Transfer out failed");
   }
