@@ -1,0 +1,3 @@
+TrashPoolTest:testAddLiquidity() (gas: 148889)
+TrashPoolTest:testRemoveLiquidity() (gas: 268393)
+TrashPoolTest:testSwapTokens() (gas: 68501)
